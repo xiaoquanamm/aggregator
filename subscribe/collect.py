@@ -160,6 +160,26 @@ def assign(
                 with open(local_file, "r", encoding="UTF8") as handle:
                     records.update(parse_records(content=str(handle.read()), delimiter=delimiter))
 
+    # 跳过黑名单站点：上次 Collect 返回 0 个节点的机场，下次不再注册/抓取
+    # 黑名单文件 skip-domains.txt 放在仓库根目录，每行一个域名（可带 http(s):// 前缀，# 开头为注释）
+    skip_file = os.path.join(PATH, "skip-domains.txt")
+    if os.path.exists(skip_file) and os.path.isfile(skip_file):
+        with open(skip_file, "r", encoding="UTF8") as handle:
+            blocked = {
+                utils.extract_domain(url=utils.trim(line)).lower()
+                for line in handle.read().split("\n")
+                if utils.trim(line) and not utils.trim(line).startswith("#")
+            }
+        blocked.discard("")
+        if blocked:
+            before = len(records)
+            records = {
+                domain: record
+                for domain, record in records.items()
+                if utils.extract_domain(url=domain).lower() not in blocked
+            }
+            logger.info(f"skip {before - len(records)} airports from blacklist, remaining: {len(records)}")
+
     if not records:
         logger.error("cannot collect any new airport for free use")
         return tasks
